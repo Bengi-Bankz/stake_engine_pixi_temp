@@ -1,6 +1,7 @@
 import * as rgs from "./rgs-auth";
 import type { PlayResponse, EndRoundResponse } from "./rgs-auth";
 import { Application, Assets, Sprite } from "pixi.js";
+import * as PIXI_SOUND from "pixi-sound";
 
 // Run authentication on load
 rgs.authenticate().catch(console.error);
@@ -8,6 +9,50 @@ rgs.authenticate().catch(console.error);
 import { Container, Text, TextStyle } from "pixi.js";
 
 (async () => {
+  // --- Session-based sound enablement ---
+  let soundEnabled = sessionStorage.getItem("soundEnabled");
+  if (soundEnabled === null) {
+    // Show overlay for sound choice
+    const overlay = document.createElement("div");
+    overlay.style.position = "fixed";
+    overlay.style.top = "0";
+    overlay.style.left = "0";
+    overlay.style.width = "100vw";
+    overlay.style.height = "100vh";
+    overlay.style.background = "rgba(0,0,0,0.85)";
+    overlay.style.display = "flex";
+    overlay.style.flexDirection = "column";
+    overlay.style.justifyContent = "center";
+    overlay.style.alignItems = "center";
+    overlay.style.zIndex = "9999";
+    overlay.innerHTML = `
+      <div style="color:#fff;font-size:2rem;margin-bottom:2rem;">Enable sound effects?</div>
+      <div>
+        <button id="sound-yes" style="font-size:1.2rem;padding:1rem 2rem;margin:0 1rem;">Play with Sound</button>
+        <button id="sound-no" style="font-size:1.2rem;padding:1rem 2rem;margin:0 1rem;">Play without Sound</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    await new Promise<void>((resolve) => {
+      overlay.querySelector("#sound-yes")!.addEventListener("click", () => {
+        sessionStorage.setItem("soundEnabled", "1");
+        overlay.remove();
+        resolve();
+      });
+      overlay.querySelector("#sound-no")!.addEventListener("click", () => {
+        sessionStorage.setItem("soundEnabled", "0");
+        overlay.remove();
+        resolve();
+      });
+    });
+    soundEnabled = sessionStorage.getItem("soundEnabled");
+  }
+  // --- Sound Effects with PixiJS Sound ---
+  const hoverSoundUrl = new URL("./assets/sfx-hover.mp3", import.meta.url).href;
+  const pressSoundUrl = new URL("./assets/sfx-press.mp3", import.meta.url).href;
+  // Register sounds
+  PIXI_SOUND.default.add("hover", hoverSoundUrl);
+  PIXI_SOUND.default.add("press", pressSoundUrl);
   // Create a new application
   const app = new Application();
   await app.init({ background: "#1099bb", resizeTo: window });
@@ -54,16 +99,16 @@ import { Container, Text, TextStyle } from "pixi.js";
   let response: PlayResponse | null = null;
 
   const style = new TextStyle({ fontSize: 24, fill: "#fff" });
-  const balanceText = new Text(`Balance: $${balance}`, style);
+  const balanceText = new Text({ text: `Balance: $${balance}`, style });
   balanceText.position.set(20, 20);
   app.stage.addChild(balanceText);
 
-  const winText = new Text(`Round Win: $${lastWin}`, style);
+  const winText = new Text({ text: `Round Win: $${lastWin}`, style });
   winText.position.set(20, 60);
   app.stage.addChild(winText);
 
   const endRoundStyle = new TextStyle({ fontSize: 18, fill: "#ffb" });
-  const endRoundDialog = new Text("", endRoundStyle);
+  const endRoundDialog = new Text({ text: "", style: endRoundStyle });
   endRoundDialog.position.set(20, 180);
   app.stage.addChild(endRoundDialog);
 
@@ -78,14 +123,60 @@ import { Container, Text, TextStyle } from "pixi.js";
     bg.width = 160;
     bg.height = 48;
     btn.addChild(bg);
-    const txt = new Text(label, new TextStyle({ fontSize: 20, fill: "#fff" }));
+    const txt = new Text({
+      text: label,
+      style: new TextStyle({ fontSize: 20, fill: "#fff" }),
+    });
     txt.anchor.set(0.5);
     txt.position.set(80, 24);
     btn.addChild(txt);
     btn.position.set(x, y);
     btn.eventMode = "static";
     btn.cursor = "pointer";
-    btn.on("pointertap", onClick);
+
+    // Button scaling effect
+    btn.on("pointerover", () => {
+      console.log("[DEBUG] pointerover fired for button:", label);
+      if (sessionStorage.getItem("soundEnabled") === "1") {
+        console.log("[DEBUG] Playing hover sound");
+        PIXI_SOUND.default.play("hover");
+      } else {
+        console.log("[DEBUG] Sound not enabled, not playing hover sound");
+      }
+      btn.scale.set(1.08);
+      console.log("[DEBUG] Set scale to 1.08");
+    });
+    btn.on("pointerout", () => {
+      console.log("[DEBUG] pointerout fired for button:", label);
+      btn.scale.set(1);
+      console.log("[DEBUG] Set scale to 1");
+    });
+    btn.on("pointerdown", () => {
+      console.log("[DEBUG] pointerdown fired for button:", label);
+      btn.scale.set(0.95);
+      console.log("[DEBUG] Set scale to 0.95");
+    });
+    btn.on("pointerup", () => {
+      console.log("[DEBUG] pointerup fired for button:", label);
+      btn.scale.set(1.08);
+      console.log("[DEBUG] Set scale to 1.08");
+    });
+    btn.on("pointerupoutside", () => {
+      console.log("[DEBUG] pointerupoutside fired for button:", label);
+      btn.scale.set(1);
+      console.log("[DEBUG] Set scale to 1");
+    });
+    btn.on("pointertap", () => {
+      console.log("[DEBUG] pointertap fired for button:", label);
+      if (sessionStorage.getItem("soundEnabled") === "1") {
+        console.log("[DEBUG] Playing press sound");
+        PIXI_SOUND.default.play("press");
+      } else {
+        console.log("[DEBUG] Sound not enabled, not playing press sound");
+      }
+      onClick();
+    });
+
     app.stage.addChild(btn);
     return btn;
   }
